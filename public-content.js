@@ -51,7 +51,7 @@
     var textBindings = {
       '.hero-viewport + .bg-gradient-to-r': null,
       '#video-title': 'video.title',
-      '#about > .reveal-stagger p:first-child': 'about.eyebrow',
+      '#about .reveal-stagger > div:first-child > p:first-child': 'about.eyebrow',
       '#about h2': 'about.title',
       '#about .reveal-stagger > div:first-child p:nth-of-type(2)': 'about.body_1',
       '#about .reveal-stagger > div:first-child p:nth-of-type(3)': 'about.body_2',
@@ -62,7 +62,7 @@
       '#team > div > .reveal p': 'team.description',
       '#booking .inline-flex span': 'booking.eyebrow',
       '#booking h3': 'booking.title',
-      '#booking > div.relative p': 'booking.description',
+      '#booking .max-w-2xl > p': 'booking.description',
       '#booking a span': 'booking.cta',
       '#contacts p.text-sm': 'contacts.eyebrow',
       '#contacts h2': 'contacts.title'
