@@ -1,0 +1,930 @@
+-- SHI Beauty Supabase setup. Paste the contents of this file into SQL Editor and run it once.
+-- Create the first Auth administrator and run supabase/bootstrap_first_admin.sql separately afterwards.
+begin;
+
+
+-- ===== supabase\migrations\20261124230000_create_shibeauty_content_schema.sql =====
+
+-- SHI Beauty content schema.
+-- Run before the security, storage, and seed migrations.
+
+create extension if not exists pgcrypto;
+
+create schema if not exists private;
+revoke all on schema private from public;
+
+create table public.admin_users (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  display_name text,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.site_settings (
+  key text primary key,
+  value text not null default '',
+  value_format text not null default 'plain'
+    check (value_format in ('plain', 'multiline', 'url')),
+  is_published boolean not null default true,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.content_blocks (
+  key text primary key,
+  section text not null,
+  value text not null default '',
+  value_format text not null default 'plain'
+    check (value_format in ('plain', 'multiline')),
+  is_published boolean not null default true,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.contact_info (
+  id smallint primary key default 1 check (id = 1),
+  address text not null default '',
+  phone_display text not null default '',
+  phone_href text not null default '',
+  hours_display text not null default '',
+  telegram_url text not null default '',
+  booking_url text not null default '',
+  map_embed_url text not null default '',
+  map_url text not null default '',
+  is_published boolean not null default true,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.media_assets (
+  id uuid primary key default gen_random_uuid(),
+  storage_path text not null unique,
+  media_kind text not null check (media_kind in ('image', 'video', 'audio')),
+  mime_type text,
+  original_name text,
+  alt_text text not null default '',
+  metadata jsonb not null default '{}'::jsonb,
+  is_published boolean not null default true,
+  created_by uuid references auth.users (id) on delete set null,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.media_slots (
+  slot_key text primary key,
+  asset_id uuid not null references public.media_assets (id) on delete restrict,
+  alt_text text not null default '',
+  sort_order integer not null default 0 check (sort_order >= 0),
+  is_published boolean not null default true,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.video_reels (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  title text not null,
+  aria_label text not null default '',
+  video_asset_id uuid not null references public.media_assets (id) on delete restrict,
+  poster_asset_id uuid references public.media_assets (id) on delete restrict,
+  sort_order integer not null default 0 check (sort_order >= 0),
+  is_published boolean not null default true,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.service_categories (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  title text not null,
+  description text not null default '',
+  sort_order integer not null default 0 check (sort_order >= 0),
+  is_published boolean not null default true,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.service_groups (
+  id uuid primary key default gen_random_uuid(),
+  category_id uuid not null references public.service_categories (id) on delete cascade,
+  slug text not null,
+  title text not null,
+  note text not null default '',
+  sort_order integer not null default 0 check (sort_order >= 0),
+  is_published boolean not null default true,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (category_id, slug)
+);
+
+create table public.service_items (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references public.service_groups (id) on delete cascade,
+  name text not null,
+  price_text text,
+  description text not null default '',
+  sort_order integer not null default 0 check (sort_order >= 0),
+  is_published boolean not null default true,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (group_id, name)
+);
+
+create table public.promotions (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  eyebrow text not null default '',
+  title text not null,
+  description text not null default '',
+  icon_key text not null default '',
+  sort_order integer not null default 0 check (sort_order >= 0),
+  is_published boolean not null default true,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.bar_groups (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  title text not null,
+  sort_order integer not null default 0 check (sort_order >= 0),
+  is_published boolean not null default true,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.bar_items (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references public.bar_groups (id) on delete cascade,
+  name text not null,
+  price_text text,
+  description text not null default '',
+  sort_order integer not null default 0 check (sort_order >= 0),
+  is_published boolean not null default true,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (group_id, name)
+);
+
+create table public.team_categories (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  title text not null,
+  sort_order integer not null default 0 check (sort_order >= 0),
+  is_published boolean not null default true,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.team_members (
+  id uuid primary key default gen_random_uuid(),
+  category_id uuid not null references public.team_categories (id) on delete restrict,
+  slug text not null unique,
+  name text not null,
+  specialty text not null default '',
+  description text not null default '',
+  photo_asset_id uuid references public.media_assets (id) on delete set null,
+  fallback_initial text,
+  sort_order integer not null default 0 check (sort_order >= 0),
+  is_published boolean not null default true,
+  updated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.content_revisions (
+  id bigint generated always as identity primary key,
+  table_name text not null,
+  row_key text not null,
+  operation text not null check (operation in ('INSERT', 'UPDATE', 'DELETE')),
+  before_data jsonb,
+  after_data jsonb,
+  changed_by uuid references auth.users (id) on delete set null,
+  changed_at timestamptz not null default now()
+);
+
+create index service_groups_category_order_idx
+  on public.service_groups (category_id, sort_order);
+create index service_items_group_order_idx
+  on public.service_items (group_id, sort_order);
+create index bar_items_group_order_idx
+  on public.bar_items (group_id, sort_order);
+create index team_members_category_order_idx
+  on public.team_members (category_id, sort_order);
+create index media_slots_order_idx
+  on public.media_slots (sort_order);
+create index video_reels_order_idx
+  on public.video_reels (sort_order);
+create index content_revisions_table_row_idx
+  on public.content_revisions (table_name, row_key, changed_at desc);
+
+-- ===== supabase\migrations\20261124230100_create_shibeauty_security_storage.sql =====
+
+-- SHI Beauty access control, audit history, restore function, and Storage.
+-- Run after 20261124230000_create_shibeauty_content_schema.sql.
+
+create or replace function private.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.admin_users
+    where user_id = (select auth.uid())
+      and is_active = true
+  );
+$$;
+
+revoke all on function private.is_admin() from public;
+grant execute on function private.is_admin() to anon, authenticated;
+grant usage on schema private to anon, authenticated;
+
+create or replace function private.touch_content_updated_at()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.updated_at = now();
+  new.updated_by = (select auth.uid());
+  return new;
+end;
+$$;
+
+create or replace function private.log_content_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  before_data jsonb;
+  after_data jsonb;
+  row_key text;
+begin
+  before_data := case when tg_op in ('UPDATE', 'DELETE') then to_jsonb(old) else null end;
+  after_data := case when tg_op in ('INSERT', 'UPDATE') then to_jsonb(new) else null end;
+  row_key := coalesce(
+    after_data ->> 'id',
+    after_data ->> 'key',
+    after_data ->> 'slot_key',
+    before_data ->> 'id',
+    before_data ->> 'key',
+    before_data ->> 'slot_key',
+    'singleton'
+  );
+
+  insert into public.content_revisions (
+    table_name,
+    row_key,
+    operation,
+    before_data,
+    after_data,
+    changed_by
+  ) values (
+    tg_table_name,
+    row_key,
+    tg_op,
+    before_data,
+    after_data,
+    (select auth.uid())
+  );
+
+  return case when tg_op = 'DELETE' then old else new end;
+end;
+$$;
+
+revoke all on function private.touch_content_updated_at() from public;
+revoke all on function private.log_content_change() from public;
+
+create or replace function private.restore_revision(p_revision_id bigint)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  revision_row public.content_revisions%rowtype;
+  primary_key_column text;
+  payload jsonb;
+begin
+  if not private.is_admin() then
+    raise exception 'Only an active administrator can restore content';
+  end if;
+
+  select *
+  into revision_row
+  from public.content_revisions
+  where id = p_revision_id;
+
+  if not found then
+    raise exception 'Content revision % was not found', p_revision_id;
+  end if;
+
+  primary_key_column := case revision_row.table_name
+    when 'site_settings' then 'key'
+    when 'content_blocks' then 'key'
+    when 'contact_info' then 'id'
+    when 'media_assets' then 'id'
+    when 'media_slots' then 'slot_key'
+    when 'video_reels' then 'id'
+    when 'service_categories' then 'id'
+    when 'service_groups' then 'id'
+    when 'service_items' then 'id'
+    when 'promotions' then 'id'
+    when 'bar_groups' then 'id'
+    when 'bar_items' then 'id'
+    when 'team_categories' then 'id'
+    when 'team_members' then 'id'
+    else null
+  end;
+
+  if primary_key_column is null then
+    raise exception 'Table % cannot be restored through this function', revision_row.table_name;
+  end if;
+
+  payload := revision_row.before_data;
+
+  execute format(
+    'delete from public.%I where %I::text = $1',
+    revision_row.table_name,
+    primary_key_column
+  ) using revision_row.row_key;
+
+  if payload is not null then
+    execute format(
+      'insert into public.%I select * from jsonb_populate_record(null::public.%I, $1)',
+      revision_row.table_name,
+      revision_row.table_name
+    ) using payload;
+  end if;
+end;
+$$;
+
+revoke all on function private.restore_revision(bigint) from public;
+grant execute on function private.restore_revision(bigint) to authenticated;
+
+-- Exposed RPC wrapper for the authenticated admin panel. The private function
+-- performs the administrator check before changing any content row.
+create or replace function public.restore_content_revision(p_revision_id bigint)
+returns void
+language sql
+security invoker
+set search_path = public, private
+as $$
+  select private.restore_revision(p_revision_id);
+$$;
+
+revoke all on function public.restore_content_revision(bigint) from public;
+grant execute on function public.restore_content_revision(bigint) to authenticated;
+
+do $$
+declare
+  table_name text;
+  content_tables constant text[] := array[
+    'site_settings',
+    'content_blocks',
+    'contact_info',
+    'media_assets',
+    'media_slots',
+    'video_reels',
+    'service_categories',
+    'service_groups',
+    'service_items',
+    'promotions',
+    'bar_groups',
+    'bar_items',
+    'team_categories',
+    'team_members'
+  ];
+begin
+  foreach table_name in array content_tables loop
+    execute format('alter table public.%I enable row level security', table_name);
+
+    execute format(
+      'create policy %I on public.%I for select to anon, authenticated using (is_published = true)',
+      'shi_public_read_' || table_name,
+      table_name
+    );
+    execute format(
+      'create policy %I on public.%I for select to authenticated using (private.is_admin())',
+      'shi_admin_read_' || table_name,
+      table_name
+    );
+    execute format(
+      'create policy %I on public.%I for insert to authenticated with check (private.is_admin())',
+      'shi_admin_insert_' || table_name,
+      table_name
+    );
+    execute format(
+      'create policy %I on public.%I for update to authenticated using (private.is_admin()) with check (private.is_admin())',
+      'shi_admin_update_' || table_name,
+      table_name
+    );
+    execute format(
+      'create policy %I on public.%I for delete to authenticated using (private.is_admin())',
+      'shi_admin_delete_' || table_name,
+      table_name
+    );
+
+    execute format('grant select on public.%I to anon, authenticated', table_name);
+    execute format('grant insert, update, delete on public.%I to authenticated', table_name);
+  end loop;
+end;
+$$;
+
+alter table public.admin_users enable row level security;
+create policy shi_admin_users_read on public.admin_users
+  for select to authenticated using (private.is_admin());
+grant select on public.admin_users to authenticated;
+
+alter table public.content_revisions enable row level security;
+create policy shi_admin_revisions_read on public.content_revisions
+  for select to authenticated using (private.is_admin());
+grant select on public.content_revisions to authenticated;
+
+do $$
+declare
+  table_name text;
+  content_tables constant text[] := array[
+    'site_settings',
+    'content_blocks',
+    'contact_info',
+    'media_assets',
+    'media_slots',
+    'video_reels',
+    'service_categories',
+    'service_groups',
+    'service_items',
+    'promotions',
+    'bar_groups',
+    'bar_items',
+    'team_categories',
+    'team_members'
+  ];
+begin
+  foreach table_name in array content_tables loop
+    execute format(
+      'create trigger %I before update on public.%I for each row execute function private.touch_content_updated_at()',
+      'shi_touch_' || table_name,
+      table_name
+    );
+    execute format(
+      'create trigger %I after insert or update or delete on public.%I for each row execute function private.log_content_change()',
+      'shi_history_' || table_name,
+      table_name
+    );
+  end loop;
+end;
+$$;
+
+insert into storage.buckets (
+  id,
+  name,
+  public,
+  file_size_limit,
+  allowed_mime_types
+) values (
+  'site-media',
+  'site-media',
+  true,
+  52428800,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/quicktime']::text[]
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists shi_site_media_public_read on storage.objects;
+drop policy if exists shi_site_media_admin_insert on storage.objects;
+drop policy if exists shi_site_media_admin_update on storage.objects;
+drop policy if exists shi_site_media_admin_delete on storage.objects;
+
+create policy shi_site_media_public_read on storage.objects
+  for select to anon, authenticated
+  using (bucket_id = 'site-media');
+
+create policy shi_site_media_admin_insert on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'site-media' and private.is_admin());
+
+create policy shi_site_media_admin_update on storage.objects
+  for update to authenticated
+  using (bucket_id = 'site-media' and private.is_admin())
+  with check (bucket_id = 'site-media' and private.is_admin());
+
+create policy shi_site_media_admin_delete on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'site-media' and private.is_admin());
+
+-- ===== supabase\migrations\20261124230200_seed_shibeauty_content.sql =====
+
+-- SHI Beauty initial content import.
+-- Run after 20261124230000_create_shibeauty_content_schema.sql and
+-- 20261124230100_create_shibeauty_security_storage.sql.
+
+
+-- General site settings
+insert into public.site_settings (key, value, value_format) values ('site.name', 'SHI Beauty', 'plain') on conflict (key) do nothing;
+insert into public.site_settings (key, value, value_format) values ('site.title', 'SHI Beauty — Премиальный салон красоты', 'plain') on conflict (key) do nothing;
+insert into public.site_settings (key, value, value_format) values ('site.description', 'Премиальный салон красоты SHI Beauty — индивидуальный сервис, экспертные мастера и безупречный стиль.', 'plain') on conflict (key) do nothing;
+insert into public.site_settings (key, value, value_format) values ('site.canonical_url', 'https://shibeauty.ru/', 'url') on conflict (key) do nothing;
+insert into public.site_settings (key, value, value_format) values ('site.og_image', 'https://shibeauty.ru/img/1.jpg', 'url') on conflict (key) do nothing;
+insert into public.site_settings (key, value, value_format) values ('site.price_range', '₽₽₽', 'plain') on conflict (key) do nothing;
+
+-- Editable text blocks
+insert into public.content_blocks (key, section, value, value_format) values ('nav.about', 'navigation', 'О салоне', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('nav.services', 'navigation', 'Услуги', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('nav.promotions', 'navigation', 'Акции', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('nav.bar', 'navigation', 'Барная карта', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('nav.team', 'navigation', 'Команда', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('nav.contacts', 'navigation', 'Контакты', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('nav.booking', 'navigation', 'Онлайн-запись', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('hero.eyebrow', 'hero', 'Премиальный сервис', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('hero.title', 'hero', 'Изысканная красота
+в каждом штрихе.', 'multiline') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('hero.description', 'hero', 'SHI Beauty — пространство для тех, кто выбирает тонкость, комфорт и безупречный результат.', 'multiline') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('hero.cta_primary', 'hero', 'Записаться на визит', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('hero.cta_secondary', 'hero', 'Посмотреть услуги', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('video.title', 'video', 'Видео SHI Beauty', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('about.eyebrow', 'about', 'О салоне', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('about.title', 'about', 'Пространство, где роскошь ощущается с первых минут.', 'multiline') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('about.body_1', 'about', 'Мы создаём атмосферу спокойствия, точности и утончённого сервиса: от консультации до финального штриха. В SHI Beauty каждая процедура — это внимательный подход, экспертная техника и особая атмосфера, где ценят ваше время и индивидуальность.', 'multiline') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('about.body_2', 'about', 'Здесь вы найдёте персональный уход, премиальные материалы и мастеров, которые работают с художественной точностью и деликатностью.', 'multiline') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('services.eyebrow', 'services', 'Услуги и цены', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('services.title', 'services', 'Премиальный уход без компромиссов.', 'multiline') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('services.description', 'services', 'Нажмите на интересующую категорию, чтобы открыть полный список услуг и цен.', 'multiline') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('promotions.eyebrow', 'promotions', 'Специально для гостей', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('promotions.title', 'promotions', 'Актуальные акции', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('bar.eyebrow', 'bar', 'Эксклюзивно для гостей', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('bar.title', 'bar', 'Барная карта', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('team.title', 'team', 'Наши Мастера', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('team.description', 'team', 'Каждый мастер — свой почерк и подход. Выбирайте специалиста, который откликается именно вам.', 'multiline') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('team.tab.nails', 'team', 'Ногтевые мастера', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('team.tab.hair', 'team', 'Парикмахеры', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('team.tab.spa', 'team', 'SPA и косметология', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('booking.eyebrow', 'booking', 'Премиальный сервис', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('booking.title', 'booking', 'Выберите удобное время и насладитесь атмосферой', 'multiline') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('booking.description', 'booking', 'Каждого гостя нашей студии мы угощаем авторским освежающим коктейлем — отличный бонус к идеальному маникюру и залог прекрасного настроения.', 'multiline') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('booking.cta', 'booking', 'Записаться онлайн', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('contacts.eyebrow', 'contacts', 'Контакты', 'plain') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('contacts.title', 'contacts', 'Мы ждём вас в центре спокойствия и стиля.', 'multiline') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('services.nails.note', 'services', 'Точные цены на маникюр и педикюр зависят от выбранного мастера и его квалификации — уточняйте стоимость при записи.', 'multiline') on conflict (key) do nothing;
+insert into public.content_blocks (key, section, value, value_format) values ('bar.note', 'bar', 'Коктейли (Лагуна, Текила, Апероль) — уточняйте у бармена.', 'multiline') on conflict (key) do nothing;
+
+-- Contact information
+insert into public.contact_info (id, address, phone_display, phone_href, hours_display, telegram_url, booking_url, map_embed_url, map_url)
+values (1, 'ул. Чехова, 16, Чехов', '+7 (495) 023-15-23', 'tel:+74950231523', 'Пн–Вс: 9:00–21:00', 'https://t.me/shi_beauty', 'http://n714376.yclients.com', 'https://yandex.ru/map-widget/v1/-/CTwvvA6e', 'https://yandex.ru/maps/-/CTwvvA6e')
+on conflict (id) do nothing;
+
+-- Existing media library entries. Files are uploaded to Storage separately.
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/1.jpg', 'image', 'image/jpeg', '1.jpg', 'Интерьер салона SHI Beauty', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/10.JPG', 'image', 'image/jpeg', '10.JPG', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/2.jpg', 'image', 'image/jpeg', '2.jpg', 'Интерьер премиального салона', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/3.jpg', 'image', 'image/jpeg', '3.jpg', 'Текстурный стабилизированный мох в интерьере', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/4.jpg', 'image', 'image/jpeg', '4.jpg', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/5.jpg', 'image', 'image/jpeg', '5.jpg', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/6.jpg', 'image', 'image/jpeg', '6.jpg', 'Коридор с кабинетами SHI Beauty', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/7.jpg', 'image', 'image/jpeg', '7.jpg', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/8.jpg', 'image', 'image/jpeg', '8.jpg', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/9.JPG', 'image', 'image/jpeg', '9.JPG', 'Рабочие места мастеров в SHI Beauty', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/IMG_7180.JPG', 'image', 'image/jpeg', 'IMG_7180.JPG', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/anastasia.jpg.jpg', 'image', 'image/jpeg', 'anastasia.jpg.jpg', 'Анастасия', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/kristina-color.jpg', 'image', 'image/jpeg', 'kristina-color.jpg', 'Кристина', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/kristina-massage.jpg', 'image', 'image/jpeg', 'kristina-massage.jpg', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/product-hikari.jpg', 'image', 'image/jpeg', 'product-hikari.jpg', 'Уходовая маска HIKARI Power Mask', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/product-shikoil.jpg', 'image', 'image/jpeg', 'product-shikoil.jpg', 'Масло для роста бровей и ресниц SHIKOIL', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shabbona.jpg.JPG', 'image', 'image/jpeg', 'shabbona.jpg.JPG', 'Шаббона', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-01.MOV', 'video', 'video/quicktime', 'shi-reel-01.MOV', '', false) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-01.jpg', 'image', 'image/jpeg', 'shi-reel-01.jpg', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-01.mp4', 'video', 'video/mp4', 'shi-reel-01.mp4', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-02.MOV', 'video', 'video/quicktime', 'shi-reel-02.MOV', '', false) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-02.jpg', 'image', 'image/jpeg', 'shi-reel-02.jpg', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-02.mp4', 'video', 'video/mp4', 'shi-reel-02.mp4', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-03.MOV', 'video', 'video/quicktime', 'shi-reel-03.MOV', '', false) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-03.jpg', 'image', 'image/jpeg', 'shi-reel-03.jpg', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-03.mp4', 'video', 'video/mp4', 'shi-reel-03.mp4', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-04.jpg', 'image', 'image/jpeg', 'shi-reel-04.jpg', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-04.mp4', 'video', 'video/mp4', 'shi-reel-04.mp4', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-05.jpg', 'image', 'image/jpeg', 'shi-reel-05.jpg', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-05.mp4', 'video', 'video/mp4', 'shi-reel-05.mp4', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-06.jpg', 'image', 'image/jpeg', 'shi-reel-06.jpg', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/shi-reel-06.mp4', 'video', 'video/mp4', 'shi-reel-06.mp4', '', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/sign-shi.jpg', 'image', 'image/jpeg', 'sign-shi.jpg', 'Логотип SHI Beauty', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/siranush.jpg.jpg', 'image', 'image/jpeg', 'siranush.jpg.jpg', 'Сирануш', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/susanna-hardware.jpg', 'image', 'image/jpeg', 'susanna-hardware.jpg', 'Сусанна', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/work-nails.jpg', 'image', 'image/jpeg', 'work-nails.jpg', 'Маникюр от мастеров SHI Beauty', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/work-procedure.jpg', 'image', 'image/jpeg', 'work-procedure.jpg', 'Аппаратная процедура в SHI Beauty', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/yulia-hair.webp', 'image', 'image/webp', 'yulia-hair.webp', 'Юля', true) on conflict (storage_path) do nothing;
+insert into public.media_assets (storage_path, media_kind, mime_type, original_name, alt_text, is_published) values ('site/yulia.jpg.jpeg', 'image', 'image/jpeg', 'yulia.jpg.jpeg', 'Лиза', true) on conflict (storage_path) do nothing;
+
+-- Image placements and their display order
+insert into public.media_slots (slot_key, asset_id, alt_text, sort_order) values ('hero.background', (select id from public.media_assets where storage_path = 'site/1.jpg'), 'Интерьер салона SHI Beauty', 0) on conflict (slot_key) do nothing;
+insert into public.media_slots (slot_key, asset_id, alt_text, sort_order) values ('hero.billboard.01', (select id from public.media_assets where storage_path = 'site/1.jpg'), 'Интерьер салона SHI Beauty', 1) on conflict (slot_key) do nothing;
+insert into public.media_slots (slot_key, asset_id, alt_text, sort_order) values ('hero.billboard.02', (select id from public.media_assets where storage_path = 'site/3.jpg'), 'Текстурный стабилизированный мох в интерьере', 2) on conflict (slot_key) do nothing;
+insert into public.media_slots (slot_key, asset_id, alt_text, sort_order) values ('hero.billboard.03', (select id from public.media_assets where storage_path = 'site/6.jpg'), 'Коридор с кабинетами SHI Beauty', 3) on conflict (slot_key) do nothing;
+insert into public.media_slots (slot_key, asset_id, alt_text, sort_order) values ('hero.billboard.04', (select id from public.media_assets where storage_path = 'site/9.JPG'), 'Рабочие места мастеров в SHI Beauty', 4) on conflict (slot_key) do nothing;
+insert into public.media_slots (slot_key, asset_id, alt_text, sort_order) values ('hero.billboard.05', (select id from public.media_assets where storage_path = 'site/work-nails.jpg'), 'Маникюр от мастеров SHI Beauty', 5) on conflict (slot_key) do nothing;
+insert into public.media_slots (slot_key, asset_id, alt_text, sort_order) values ('hero.billboard.06', (select id from public.media_assets where storage_path = 'site/work-procedure.jpg'), 'Аппаратная процедура в SHI Beauty', 6) on conflict (slot_key) do nothing;
+insert into public.media_slots (slot_key, asset_id, alt_text, sort_order) values ('hero.billboard.07', (select id from public.media_assets where storage_path = 'site/product-shikoil.jpg'), 'Масло для роста бровей и ресниц SHIKOIL', 7) on conflict (slot_key) do nothing;
+insert into public.media_slots (slot_key, asset_id, alt_text, sort_order) values ('hero.billboard.08', (select id from public.media_assets where storage_path = 'site/product-hikari.jpg'), 'Уходовая маска HIKARI Power Mask', 8) on conflict (slot_key) do nothing;
+insert into public.media_slots (slot_key, asset_id, alt_text, sort_order) values ('hero.billboard.09', (select id from public.media_assets where storage_path = 'site/sign-shi.jpg'), 'Логотип SHI Beauty', 9) on conflict (slot_key) do nothing;
+insert into public.media_slots (slot_key, asset_id, alt_text, sort_order) values ('about.image', (select id from public.media_assets where storage_path = 'site/2.jpg'), 'Интерьер премиального салона', 0) on conflict (slot_key) do nothing;
+
+-- Video reels
+insert into public.video_reels (slug, title, aria_label, video_asset_id, poster_asset_id, sort_order) values ('reel-01', 'Моменты SHI', 'Моменты SHI', (select id from public.media_assets where storage_path = 'site/shi-reel-01.mp4'), (select id from public.media_assets where storage_path = 'site/shi-reel-01.jpg'), 0) on conflict (slug) do nothing;
+insert into public.video_reels (slug, title, aria_label, video_asset_id, poster_asset_id, sort_order) values ('reel-02', 'Атмосфера салона', 'Атмосфера салона', (select id from public.media_assets where storage_path = 'site/shi-reel-02.mp4'), (select id from public.media_assets where storage_path = 'site/shi-reel-02.jpg'), 1) on conflict (slug) do nothing;
+insert into public.video_reels (slug, title, aria_label, video_asset_id, poster_asset_id, sort_order) values ('reel-03', 'Красота в движении', 'Красота в движении', (select id from public.media_assets where storage_path = 'site/shi-reel-03.mp4'), (select id from public.media_assets where storage_path = 'site/shi-reel-03.jpg'), 2) on conflict (slug) do nothing;
+insert into public.video_reels (slug, title, aria_label, video_asset_id, poster_asset_id, sort_order) values ('reel-04', 'Маникюр крупным планом', 'Маникюр крупным планом', (select id from public.media_assets where storage_path = 'site/shi-reel-04.mp4'), (select id from public.media_assets where storage_path = 'site/shi-reel-04.jpg'), 3) on conflict (slug) do nothing;
+insert into public.video_reels (slug, title, aria_label, video_asset_id, poster_asset_id, sort_order) values ('reel-05', 'Дизайн ногтей', 'Дизайн ногтей', (select id from public.media_assets where storage_path = 'site/shi-reel-05.mp4'), (select id from public.media_assets where storage_path = 'site/shi-reel-05.jpg'), 4) on conflict (slug) do nothing;
+insert into public.video_reels (slug, title, aria_label, video_asset_id, poster_asset_id, sort_order) values ('reel-06', 'Награды салона', 'Награды салона', (select id from public.media_assets where storage_path = 'site/shi-reel-06.mp4'), (select id from public.media_assets where storage_path = 'site/shi-reel-06.jpg'), 5) on conflict (slug) do nothing;
+
+-- Services and prices parsed from the current HTML
+insert into public.service_categories (slug, title, description, sort_order) values ('service-01', 'Ногтевой сервис (Маникюр & Педикюр)', 'Точные цены на маникюр и педикюр зависят от выбранного мастера и его квалификации — уточняйте стоимость при записи.', 0) on conflict (slug) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-01'), 'service-01-group-01', 'Основные услуги', 'Точные цены на маникюр и педикюр зависят от выбранного мастера и его квалификации — уточняйте стоимость при записи.', 0) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-01-group-01'), 'Маникюр Mini', null, 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-01-group-01'), 'Маникюр Extra', null, 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-01-group-01'), 'Маникюр Super', null, 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-01-group-01'), 'Маникюр Men', null, 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-01-group-01'), 'Маникюр Top Men', null, 4) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-01-group-01'), 'Маникюр Little', null, 5) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-01-group-01'), 'Педикюр Super Mini', null, 6) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-01-group-01'), 'Педикюр Mini', null, 7) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-01-group-01'), 'Педикюр Extra', null, 8) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-01-group-01'), 'Педикюр Super', null, 9) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-01-group-01'), 'Педикюр Extra Men', null, 10) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-01-group-01'), 'Педикюр Super Men', null, 11) on conflict (group_id, name) do nothing;
+insert into public.service_categories (slug, title, description, sort_order) values ('service-02', 'Брови и ресницы', '', 1) on conflict (slug) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-02'), 'service-02-group-01', 'Основные услуги', '', 0) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Brows Mini', '1 500 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Brows Total', '3 000 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Ламинирование и окрашивание бровей', '2 200 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Ламинирование и окрашивание ресниц', '2 500 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Organic уход', '1 500 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Коррекция формы бровей', '800 ₽', 5) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Окрашивание бровей', '900 ₽', 6) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Осветление и уход бровей', '1 700 ₽', 7) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Уход botox (брови)', '280 ₽', 8) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Уход botox (ресницы)', '300 ₽', 9) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Окрашивание ресниц', '700 ₽', 10) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Наращивание ресниц (классика)', '2 500 ₽', 11) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Наращивание ресниц (1,5D)', '2 700 ₽', 12) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Наращивание ресниц (2D)', '3 000 ₽', 13) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Наращивание ресниц (2,5D)', '3 200 ₽', 14) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Наращивание ресниц (3D)', '3 500 ₽', 15) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-02-group-01'), 'Снятие наращенных ресниц', '300 ₽', 16) on conflict (group_id, name) do nothing;
+insert into public.service_categories (slug, title, description, sort_order) values ('service-03', 'Парикмахерские услуги', '', 2) on conflict (slug) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-03'), 'service-03-group-01', 'Основные услуги', '', 0) on conflict (category_id, slug) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-03'), 'service-03-group-02', 'Барбер', '', 1) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-02'), 'Стрижка Premium', '2 500 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-02'), 'Стрижка Men', '2 000 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-02'), 'Стрижка Little', '1 000 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-02'), 'Стрижка ультра короткая', '800 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-02'), 'Стрижка бороды', '1 200 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-02'), 'Традиционное бритьё', '1 500 ₽', 5) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-02'), 'Укладка волос', '500 ₽', 6) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-02'), 'Камуфляж седины', '1 000–3 000 ₽', 7) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-02'), 'Коррекция воском', '500 ₽', 8) on conflict (group_id, name) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-03'), 'service-03-group-03', 'Стрижки и укладка', '', 2) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-03'), 'Стрижка', '3 500 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-03'), 'Стрижка Light', '2 000 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-03'), 'Детская стрижка', '2 500 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-03'), 'Детская стрижка Light', '1 500 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-03'), 'Стрижка (чёлка)', '1 000 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-03'), 'Укладка', '3 000–6 000 ₽', 5) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-03'), 'Укладка Light', '2 000 ₽', 6) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-03'), 'Стрижка For Men', '1 500 ₽', 7) on conflict (group_id, name) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-03'), 'service-03-group-04', 'Окрашивание', '', 3) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-04'), 'Первичная консультация', '0 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-04'), 'Окрашивание Mini', '5 500 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-04'), 'Окрашивание Medium', '6 000 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-04'), 'Окрашивание Extra', '7 500 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-04'), 'Окрашивание Super extra', '9 000 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-04'), 'Флеш до 4 прядей', '6 000 ₽', 5) on conflict (group_id, name) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-03'), 'service-03-group-05', 'Осветление в технике', '', 4) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-05'), 'Mini', '8 000 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-05'), 'Medium', '9 000 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-05'), 'Extra', '12 000 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-05'), 'Super extra', '15 000 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-03'), 'service-03-group-06', 'SHI блонд (тотальный блонд)', '', 5) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-06'), 'Mini', '6 500 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-06'), 'Medium', '7 500 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-06'), 'Extra', '10 500 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-06'), 'Super extra', '13 500 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-03'), 'service-03-group-07', 'Уход KEBREN', '', 6) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-07'), 'Mini', '1 500 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-07'), 'Medium', '2 500 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-07'), 'Extra', '3 500 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-07'), 'Super extra', '4 500 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-03'), 'service-03-group-08', 'Уход Hair Sekta', '', 7) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-08'), 'Mini', '2 000 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-08'), 'Medium', '3 000 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-08'), 'Extra', '4 000 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-08'), 'Super extra', '5 000 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-03'), 'service-03-group-09', 'Уход KV-1', '', 8) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-09'), 'Mini', '2 500 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-09'), 'Medium', '3 500 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-09'), 'Extra', '4 500 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-03-group-09'), 'Super extra', '6 000 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_categories (slug, title, description, sort_order) values ('service-04', 'Массаж', '', 3) on conflict (slug) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-04'), 'service-04-group-01', 'Основные услуги', '', 0) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Массаж общий', '3 400 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Массаж лица', '2 400 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Массаж головы', '1 000 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Массаж шейно-воротниковой зоны', '1 600 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Массаж спины и шейно-воротниковой зоны', '2 700 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Массаж рук', '1 200 ₽', 5) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Массаж ног и стоп', '1 700 ₽', 6) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Массаж лимфодренажный', '2 600 ₽', 7) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Массаж антицеллюлитный общий', '4 200 ₽', 8) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Массаж ног антицеллюлитный', '2 200 ₽', 9) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Массаж спины антицеллюлитный', '1 800 ₽', 10) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Массаж живота антицеллюлитный', '1 600 ₽', 11) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Спортивный массаж', '4 600 ₽', 12) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Медовый массаж (одна проблемная зона)', '900 ₽', 13) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Стоунтерапия', '4 100 ₽', 14) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Разогрев горячими камнями', '1 500 ₽', 15) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-04-group-01'), 'Массаж лица в авторской технике (омолаживающий)', '3 900 ₽', 16) on conflict (group_id, name) do nothing;
+insert into public.service_categories (slug, title, description, sort_order) values ('service-05', 'Косметология & Аппаратный массаж', '', 4) on conflict (slug) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-05'), 'service-05-group-01', 'Основные услуги', '', 0) on conflict (category_id, slug) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-05'), 'service-05-group-02', 'Эстетическая косметология', '', 1) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-05-group-02'), 'Механическая чистка лица и уход по типу кожи', '5 300 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-05-group-02'), 'Механическая чистка лица и альгинатная маска', '6 100 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-05-group-02'), 'Уход альгинатная маска', '3 600 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-05-group-02'), 'Лазерное Омоложение лица', '2 500 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-05-group-02'), 'Лазерное Омоложение рук', '2 000 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-05'), 'service-05-group-03', 'Massage Эндосфера sculpting & Terapy pulse', '', 2) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-05-group-03'), 'Консультация со специалистом', '0 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-05-group-03'), 'Эндосфера sculpting by Beautylizer', '5 700 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-05-group-03'), 'Terapy pulse-лицо (вакуумный массаж)', '2 300 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-05-group-03'), 'Terapy pulse-комплекс все тело', '2 800 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-05-group-03'), 'Terapy pulse-одна проблемная зона', '2 000 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.service_categories (slug, title, description, sort_order) values ('service-06', 'Лазерная эпиляция', '', 5) on conflict (slug) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-06'), 'service-06-group-01', 'Основные услуги', '', 0) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Лицо полностью', '2 500 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Лицо одна зона', '800 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Шея полностью', '1 400 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Шея', '800 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Руки полностью', '3 100 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Кисти рук и предплечье', '1 800 ₽', 5) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Фаланги пальцев рук', '700 ₽', 6) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Подмышечная впадина', '1 200 ₽', 7) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Ареолы', '700 ₽', 8) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Живот', '2 900 ₽', 9) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Белая линия живота', '1 100 ₽', 10) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Спина полностью', '3 200 ₽', 11) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Поясница', '1 500 ₽', 12) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Ягодицы', '2 300 ₽', 13) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Межъягодичная впадина', '900 ₽', 14) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Классическое бикини', '2 100 ₽', 15) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Глубокое бикини', '3 100 ₽', 16) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Ноги полностью', '4 400 ₽', 17) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Стопы и голени', '2 500 ₽', 18) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Фаланги пальцев ног', '800 ₽', 19) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-01'), 'Бритьё', '500 ₽', 20) on conflict (group_id, name) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-06'), 'service-06-group-02', 'Комплексы', '', 1) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-02'), 'Подмышечные впадины, голени и стопы', '3 200 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-02'), 'Подмышечные впадины и ноги полностью', '4 800 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-02'), 'Подмышечные впадины и глубокое бикини', '3 700 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-02'), 'Глубокое бикини и ноги полностью', '6 600 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-02'), 'Руки полностью и ноги полностью', '6 400 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-02'), 'Подмышечные впадины и классическое бикини, ноги полностью', '6 600 ₽', 5) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-02'), 'Подмышечные впадины, глубокое бикини и ноги полностью', '7 500 ₽', 6) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-02'), 'Лицо полностью, подмышечные впадины, глубокое бикини и ноги полностью', '9 000 ₽', 7) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-02'), 'Лицо полностью, подмышечные впадины, руки полностью и ноги полностью', '9 000 ₽', 8) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-06-group-02'), 'Лицо, руки, подмышки, белая линия живота, ягодицы, глубокое бикини и ноги полностью', '13 100 ₽', 9) on conflict (group_id, name) do nothing;
+insert into public.service_categories (slug, title, description, sort_order) values ('service-07', 'Депиляция (Воск / Шугаринг)', '', 6) on conflict (slug) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-07'), 'service-07-group-01', 'Основные услуги', '', 0) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Лицо полностью', '1 200 ₽ / 1 400 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Лицо одна зона', '500 ₽ / 700 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Шея', '600 ₽ / 800 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Руки полностью', '1 500 ₽ / 1 700 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Кисти рук и предплечья', '900 ₽ / 1 100 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Фаланги пальцев ног / рук', '400 ₽ / 600 ₽', 5) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Подмышечная впадина', '800 ₽ / 1 000 ₽', 6) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Ареолы', '400 ₽ / 600 ₽', 7) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Живот', '1 200 ₽ / 1 400 ₽', 8) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Белая линия живота', '400 ₽ / 600 ₽', 9) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Спина полностью', '2 100 ₽ / 2 300 ₽', 10) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Поясница', '1 000 ₽ / 1 200 ₽', 11) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Ягодицы', '1 300 ₽ / 1 500 ₽', 12) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Межъягодичная впадина', '500 ₽ / 700 ₽', 13) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Классическое бикини', '1 800 ₽ / 2 000 ₽', 14) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Глубокое бикини', '2 400 ₽ / 2 600 ₽', 15) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Ноги полностью', '2 200 ₽ / 2 400 ₽', 16) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-01'), 'Стопы и голени', '1 100 ₽ / 1 300 ₽', 17) on conflict (group_id, name) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-07'), 'service-07-group-02', 'Комплексы (Воск)', '', 1) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-02'), 'Подмышечные впадины, голени и стопы', '1 500 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-02'), 'Подмышечные впадины и ноги полностью', '2 500 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-02'), 'Глубокое бикини и ноги полностью', '3 900 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-02'), 'Подмышечные впадины и глубокое бикини', '2 700 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-02'), 'Подмышки, классик бикини, ноги полностью', '4 000 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-02'), 'Подмышки, глубокое бикини, ноги полностью', '4 500 ₽', 5) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-02'), 'Подмышки, бикини, ноги и лицо полностью', '5 300 ₽', 6) on conflict (group_id, name) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-07'), 'service-07-group-03', 'Комплексы (Шугаринг)', '', 2) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-03'), 'Подмышечные впадины, голени и стопы', '1 700 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-03'), 'Подмышечные впадины и ноги полностью', '2 700 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-03'), 'Глубокое бикини и ноги полностью', '4 100 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-03'), 'Подмышечные впадины и глубокое бикини', '2 900 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-03'), 'Подмышки, классик бикини, ноги полностью', '4 200 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-07-group-03'), 'Подмышки, глубокое бикини, ноги полностью', '4 700 ₽', 5) on conflict (group_id, name) do nothing;
+insert into public.service_categories (slug, title, description, sort_order) values ('service-08', 'Макияж', '', 7) on conflict (slug) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-08'), 'service-08-group-01', 'Основные услуги', '', 0) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-08-group-01'), 'Макияж дневной', '7 000 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-08-group-01'), 'Макияж вечерний', '10 000 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_categories (slug, title, description, sort_order) values ('service-09', 'Татуировки и перманентный макияж', '', 8) on conflict (slug) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-09'), 'service-09-group-01', 'Основные услуги', '', 0) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-09-group-01'), 'Тату / ремувер Mini', '5 000 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-09-group-01'), 'Тату / ремувер Medium', '9 000 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-09-group-01'), 'Тату / ремувер Extra', '13 000 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-09-group-01'), 'Тату / ремувер Super extra', '17 000 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-09-group-01'), 'Карбоновый пилинг', '5 000 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-09-group-01'), 'Удаление тату (тело)', '9 000 ₽', 5) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-09-group-01'), 'Удаление тату (лицо)', '6 000 ₽', 6) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-09-group-01'), 'Татуаж бровей', '15 000 ₽', 7) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-09-group-01'), 'Татуаж век', '8 000 ₽', 8) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-09-group-01'), 'Татуаж губ', '10 000 ₽', 9) on conflict (group_id, name) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-09-group-01'), 'Индивидуальный эскиз', '2 500 ₽', 10) on conflict (group_id, name) do nothing;
+insert into public.service_categories (slug, title, description, sort_order) values ('service-10', 'Солярий', '', 9) on conflict (slug) do nothing;
+insert into public.service_groups (category_id, slug, title, note, sort_order) values ((select id from public.service_categories where slug = 'service-10'), 'service-10-group-01', 'Основные услуги', '', 0) on conflict (category_id, slug) do nothing;
+insert into public.service_items (group_id, name, price_text, sort_order) values ((select id from public.service_groups where slug = 'service-10-group-01'), 'Солярий — 1 минута', '80 ₽', 0) on conflict (group_id, name) do nothing;
+
+-- Promotions
+insert into public.promotions (slug, eyebrow, title, description, icon_key, sort_order) values ('promo-01', 'Для каждого гостя', 'Первая чашка — всегда в подарок', 'Первая чашка кофе или чая — наш комплимент каждому гостю SHI Beauty при любом визите, а не только в первый раз.', 'cup', 0) on conflict (slug) do nothing;
+insert into public.promotions (slug, eyebrow, title, description, icon_key, sort_order) values ('promo-02', 'В праздничные дни', 'Работаем до последнего гостя', 'В праздники не спешим закрываться по расписанию — салон продолжает работать, пока не обслужит последнего гостя.', 'clock', 1) on conflict (slug) do nothing;
+insert into public.promotions (slug, eyebrow, title, description, icon_key, sort_order) values ('promo-03', 'Важно знать', 'Вне рабочего времени', 'При записи вне стандартного графика (9:00–21:00) цены в прайсе могут отличаться — уточняйте при бронировании.', 'moon', 2) on conflict (slug) do nothing;
+
+-- Bar menu
+insert into public.bar_groups (slug, title, sort_order) values ('bar-01', 'Холодные напитки', 0) on conflict (slug) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-01'), 'Бамбл', '280 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-01'), 'Кофейный милкшейк', '400 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-01'), 'Аффогато classic', '200 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-01'), 'Аффогато not classic', '250 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-01'), 'Милкшейк', '350 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-01'), 'Свежевыжатый сок', '350 ₽', 5) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-01'), 'ICE Tea', '150 ₽', 6) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-01'), 'ICE латте / американо / матча', '300 / 250 / 300 ₽', 7) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-01'), 'ICE какао / раф / Нутелла', '350 ₽', 8) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-01'), 'Bonaqua', '170 ₽', 9) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-01'), 'Добрый кола', '120 ₽', 10) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-01'), 'Rich tonic / сок / cola', '250 / 200 / 200 ₽', 11) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-01'), 'Burn', '250 ₽', 12) on conflict (group_id, name) do nothing;
+insert into public.bar_groups (slug, title, sort_order) values ('bar-02', 'Горячие напитки', 1) on conflict (slug) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-02'), 'Чай фруктовый', '400 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-02'), 'Черный вареный кофе', '200 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-02'), 'Эспрессо / Американо', '100 / 150 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-02'), 'Капучино / Латте', '250 / 250 ₽', 3) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-02'), 'Раф / Гляссе / Моккачино', '300 ₽', 4) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-02'), 'Флэт уайт', '200 ₽', 5) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-02'), 'Кофе SHI', '500 ₽', 6) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-02'), 'Матча / Какао', '250 / 300 ₽', 7) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-02'), 'Эспрессо-тоник / Эспрессо-кола', '300 ₽', 8) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-02'), 'Нутелла', '300 ₽', 9) on conflict (group_id, name) do nothing;
+insert into public.bar_groups (slug, title, sort_order) values ('bar-03', 'Добавки к напиткам', 2) on conflict (slug) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-03'), 'Шот эспрессо / Альтернативное молоко', '50 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-03'), 'Сироп в ассортименте', '30 ₽', 1) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-03'), 'SHI индивидуальный рецепт', '400 ₽', 2) on conflict (group_id, name) do nothing;
+insert into public.bar_groups (slug, title, sort_order) values ('bar-04', 'Закуски и коктейли', 3) on conflict (slug) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-04'), 'Десерт в ассортименте', '300 ₽', 0) on conflict (group_id, name) do nothing;
+insert into public.bar_items (group_id, name, price_text, sort_order) values ((select id from public.bar_groups where slug = 'bar-04'), 'Сэндвич', '300 ₽', 1) on conflict (group_id, name) do nothing;
+
+-- Team categories and members
+insert into public.team_categories (slug, title, sort_order) values ('nails', 'Ногтевые мастера', 0) on conflict (slug) do nothing;
+insert into public.team_members (category_id, slug, name, specialty, description, photo_asset_id, fallback_initial, sort_order) values ((select id from public.team_categories where slug = 'nails'), 'nails-01', 'Сирануш', 'Подолог & Мастер маникюра', 'Эксперт по сложному педикюру, коррекции и уходу за ногтевой пластиной (установка титановой нити).', (select id from public.media_assets where storage_path = 'site/siranush.jpg.jpg'), null, 0) on conflict (slug) do nothing;
+insert into public.team_members (category_id, slug, name, specialty, description, photo_asset_id, fallback_initial, sort_order) values ((select id from public.team_categories where slug = 'nails'), 'nails-02', 'Лиза', 'Extra Master', 'Специалист по эстетическому и комплексному уходу за ногтями, авторским техникам педикюра и SPA-процедурам SHI.', (select id from public.media_assets where storage_path = 'site/yulia.jpg.jpeg'), null, 1) on conflict (slug) do nothing;
+insert into public.team_members (category_id, slug, name, specialty, description, photo_asset_id, fallback_initial, sort_order) values ((select id from public.team_categories where slug = 'nails'), 'nails-03', 'Шаббона', 'Mini Master', 'Аккуратный и тщательный уход за ногтями, чистая обработка, моделирование и наращивание.', (select id from public.media_assets where storage_path = 'site/shabbona.jpg.JPG'), null, 2) on conflict (slug) do nothing;
+insert into public.team_members (category_id, slug, name, specialty, description, photo_asset_id, fallback_initial, sort_order) values ((select id from public.team_categories where slug = 'nails'), 'nails-04', 'Анастасия', 'Mini Master', 'Художественный дизайн, квалифицированная работа со стразами Swarovski, стемпингом и архитектурой.', (select id from public.media_assets where storage_path = 'site/anastasia.jpg.jpg'), null, 3) on conflict (slug) do nothing;
+insert into public.team_categories (slug, title, sort_order) values ('hair', 'Парикмахеры', 1) on conflict (slug) do nothing;
+insert into public.team_members (category_id, slug, name, specialty, description, photo_asset_id, fallback_initial, sort_order) values ((select id from public.team_categories where slug = 'hair'), 'hair-01', 'Юля', 'Парикмахер-универсал', 'Более десяти лет создаёт стрижки и укладки любой сложности — от чёткой геометрии до воздушных образов. Чувствует форму лица и структуру волос, поэтому результат выглядит так, будто вы всегда так и выглядели.', (select id from public.media_assets where storage_path = 'site/yulia-hair.webp'), null, 0) on conflict (slug) do nothing;
+insert into public.team_members (category_id, slug, name, specialty, description, photo_asset_id, fallback_initial, sort_order) values ((select id from public.team_categories where slug = 'hair'), 'hair-02', 'Кристина', 'Парикмахер-колорист', 'Профессиональный колорист с точным чувством цвета: сложное окрашивание, растяжка тона и деликатная коррекция без единого «пятна». Оттенок подбирает индивидуально — под тон кожи и характер клиентки.', (select id from public.media_assets where storage_path = 'site/kristina-color.jpg'), null, 1) on conflict (slug) do nothing;
+insert into public.team_members (category_id, slug, name, specialty, description, photo_asset_id, fallback_initial, sort_order) values ((select id from public.team_categories where slug = 'hair'), 'hair-03', 'Дони', 'Барбер', 'Мужские стрижки и уход за бородой: чёткие линии, классическое бритьё и внимание к деталям, которые считывает только опытный глаз.', null, 'Д', 2) on conflict (slug) do nothing;
+insert into public.team_members (category_id, slug, name, specialty, description, photo_asset_id, fallback_initial, sort_order) values ((select id from public.team_categories where slug = 'hair'), 'hair-04', 'Арпине', 'Парикмахер-универсал', 'Создаёт образы, которые легко поддерживать дома: чистая техника стрижки, естественные укладки и внимание к деталям, из которых складывается результат.', null, 'А', 3) on conflict (slug) do nothing;
+insert into public.team_categories (slug, title, sort_order) values ('spa', 'SPA и косметология', 2) on conflict (slug) do nothing;
+insert into public.team_members (category_id, slug, name, specialty, description, photo_asset_id, fallback_initial, sort_order) values ((select id from public.team_categories where slug = 'spa'), 'spa-01', 'Иван', 'Массажист', 'Работает мощно и точно: глубокий спортивный массаж, снятие хронических зажимов, антистресс-техники. Редкое сочетание физической силы и внимательности к деталям — поэтому даже самый интенсивный сеанс ощущается безопасным и выверенным.', null, 'И', 0) on conflict (slug) do nothing;
+insert into public.team_members (category_id, slug, name, specialty, description, photo_asset_id, fallback_initial, sort_order) values ((select id from public.team_categories where slug = 'spa'), 'spa-02', 'Сусанна', 'Мастер аппаратной косметологии', 'Специалист по аппаратным методикам ухода за лицом и телом — от лазерного омоложения до RF-терапии. Много лет следит за новыми технологиями и точно знает, какая процедура даст результат именно вашей коже.', (select id from public.media_assets where storage_path = 'site/susanna-hardware.jpg'), null, 1) on conflict (slug) do nothing;
+insert into public.team_members (category_id, slug, name, specialty, description, photo_asset_id, fallback_initial, sort_order) values ((select id from public.team_categories where slug = 'spa'), 'spa-03', 'Ольга', 'Мастер аппаратной косметологии', 'Работает с современным аппаратным оборудованием для ухода за лицом и телом — деликатно, по науке и с видимым результатом уже после первой процедуры.', null, 'О', 2) on conflict (slug) do nothing;
+
+
+-- Imported service counts: Ногтевой сервис (Маникюр & Педикюр): 12; Брови и ресницы: 17; Парикмахерские услуги: 43; Массаж: 17; Косметология & Аппаратный массаж: 10; Лазерная эпиляция: 31; Депиляция (Воск / Шугаринг): 31; Макияж: 2; Татуировки и перманентный макияж: 11; Солярий: 1.
+-- Imported bar item count: 28.
+-- Imported team counts: nails: 4; hair: 4; spa: 3.
+
+commit;
