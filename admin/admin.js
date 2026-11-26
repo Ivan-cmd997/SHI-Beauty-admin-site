@@ -87,7 +87,8 @@
   }
 
   function publicAssetUrl(path) {
-    if (!path || !state.client) return localAssetUrl(path);
+    if (!path || path.startsWith('site/')) return localAssetUrl(path);
+    if (!state.client) return localAssetUrl(path);
     const result = state.client.storage.from('site-media').getPublicUrl(path);
     return result.data?.publicUrl || localAssetUrl(path);
   }
@@ -350,3 +351,4 @@
   window.__shiPendingAction = null;
   initAuth();
 })();
+
