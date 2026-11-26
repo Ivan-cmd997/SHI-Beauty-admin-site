@@ -4,6 +4,7 @@
   var supabaseSdk = window.supabase;
   var supabaseUrl = 'https://jboelriekfabpxcytpaa.supabase.co';
   var supabasePublishableKey = 'sb_publishable_Gjs5TvDrzzoKPa7BNGlk_A_lCLosGXP';
+  window.shiSupabaseConfig = { url: supabaseUrl, key: supabasePublishableKey };
 
   if (!supabaseSdk || typeof supabaseSdk.createClient !== 'function') {
     console.error('[SHI Beauty] Supabase JS SDK is unavailable.');
@@ -25,3 +26,4 @@
 
   window.dispatchEvent(new CustomEvent('shi:supabase-ready'));
 })();
+
