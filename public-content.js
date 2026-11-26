@@ -4,6 +4,10 @@
   // The HTML remains the fallback. This layer only replaces a block after a
   // complete, valid Supabase response has arrived.
   var client = window.shiSupabase;
+  var config = window.shiSupabaseConfig || {
+    url: 'https://jboelriekfabpxcytpaa.supabase.co',
+    key: 'sb_publishable_Gjs5TvDrzzoKPa7BNGlk_A_lCLosGXP'
+  };
   var localRoot = 'img/';
 
   function escapeHtml(value) {
@@ -154,18 +158,37 @@
     var mapLink = document.querySelector('#contacts a[href*="yandex.ru/maps"]'); if (mapLink && contact.map_url) mapLink.href = safeUrl(contact.map_url, mapLink.href);
   }
 
+  function readTable(table, select, suffix) {
+    client = window.shiSupabase || client;
+    if (client) {
+      var request = client.from(table).select(select || '*');
+      if (table === 'contact_info') return request.eq('id', 1).maybeSingle();
+      return request;
+    }
+    var query = '?select=' + encodeURIComponent(select || '*') + (suffix || '');
+    return fetch(config.url + '/rest/v1/' + table + query, {
+      headers: { apikey: config.key, Authorization: 'Bearer ' + config.key }
+    }).then(function (response) {
+      return response.text().then(function (body) {
+        if (!response.ok) return { data: null, error: new Error(body || 'Supabase request failed') };
+        var data = body ? JSON.parse(body) : [];
+        return { data: table === 'contact_info' ? (data[0] || null) : data, error: null };
+      });
+    });
+  }
+
   function loadPublicContent() {
-    if (!client) return;
+    client = window.shiSupabase || client;
     Promise.all([
-      client.from('content_blocks').select('key,value,is_published'),
-      client.from('service_categories').select('*'),
-      client.from('service_groups').select('*'),
-      client.from('service_items').select('*'),
-      client.from('media_assets').select('*'),
-      client.from('media_slots').select('*'),
-      client.from('team_categories').select('*'),
-      client.from('team_members').select('*'),
-      client.from('contact_info').select('*').eq('id', 1).maybeSingle()
+      readTable('content_blocks', 'key,value,is_published'),
+      readTable('service_categories', '*'),
+      readTable('service_groups', '*'),
+      readTable('service_items', '*'),
+      readTable('media_assets', '*'),
+      readTable('media_slots', '*'),
+      readTable('team_categories', '*'),
+      readTable('team_members', '*'),
+      readTable('contact_info', '*', '&id=eq.1')
     ]).then(function (results) {
       var failed = results.find(function (result) { return result.error; });
       if (failed || !results[0].data) return;
