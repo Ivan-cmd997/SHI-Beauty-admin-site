@@ -133,7 +133,7 @@
       const items = categoryGroups.flatMap((group) => state.services.filter((item) => item.group_id === group.id).map((item) => ({...item, groupTitle: group.title})));
       const visible = items.filter((item) => !search || `${item.name} ${item.description} ${item.groupTitle}`.toLowerCase().includes(search));
       if (!visible.length) return '';
-      return `<article class="category-card"><header class="category-head"><h2>${esc(category.title)}</h2><span>${visible.length} ${visible.length === 1 ? 'позиция' : 'позиций'}</span></header>${visible.sort((a,b) => a.sort_order - b.sort_order).map((item) => `<div class="service-row"><div><strong>${esc(item.name)}</strong>${item.description ? `<small>${esc(item.description)}</small>` : ''}</div><span class="price">${esc(item.price_text || 'По запросу')}</span><span class="status-pill ${item.is_published ? 'status-live' : ''}">${item.is_published ? 'На сайте' : 'Черновик'}</span><div class="row-actions"><button class="small-button" data-edit-service="${item.id}" aria-label="Редактировать ${esc(item.name)}">✎</button><button class="small-button danger" data-delete-service="${item.id}" aria-label="Удалить ${esc(item.name)}">×</button></div></div>`).join('')}</article>`;
+      return `<article class="category-card"><header class="category-head"><h2>${esc(category.title)}</h2><span>${visible.length} ${visible.length === 1 ? 'позиция' : 'позиций'}</span></header>${visible.sort((a,b) => a.sort_order - b.sort_order).map((item) => `<div class="service-row"><div><strong>${esc(item.name)}</strong>${item.description ? `<small>${esc(item.description)}</small>` : ''}</div><span class="price">${esc(item.price_text || 'По запросу')}</span><span class="status-pill ${item.is_published ? 'status-live' : ''}">${item.is_published ? 'На сайте' : 'Черновик'}</span><div class="row-actions"><button type="button" class="small-button" data-edit-service="${item.id}" aria-label="Редактировать ${esc(item.name)}">✎</button><button type="button" class="small-button danger" data-delete-service="${item.id}" aria-label="Удалить ${esc(item.name)}">×</button></div></div>`).join('')}</article>`;
     }).join('');
     $('#services-list').innerHTML = html || '<div class="empty-state">Услуги не найдены. Измените фильтр или добавьте новую услугу.</div>';
   }
@@ -320,8 +320,8 @@
     const nav = event.target.closest('[data-view]'); if (nav) { showView(nav.dataset.view); if (nav.dataset.mediaFilter) { state.mediaFilter = nav.dataset.mediaFilter; renderMedia(); } return; }
     if (event.target.closest('[data-open-sidebar]')) $('#sidebar').classList.add('open');
     if (event.target.closest('[data-close-sidebar]')) $('#sidebar').classList.remove('open');
-    const editService = event.target.closest('[data-edit-service]'); if (editService) fillServiceForm(state.services.find((item) => item.id === editService.dataset.editService));
-    const deleteServiceButton = event.target.closest('[data-delete-service]'); if (deleteServiceButton) await deleteService(deleteServiceButton.dataset.deleteService);
+    const editService = event.target.closest('[data-edit-service]'); if (editService) { event.preventDefault(); event.stopPropagation(); const item = state.services.find((service) => service.id === editService.dataset.editService); if (!item) { toast('Услуга не найдена. Обновите страницу.', 'error'); return; } fillServiceForm(item); return; }
+    const deleteServiceButton = event.target.closest('[data-delete-service]'); if (deleteServiceButton) { event.preventDefault(); event.stopPropagation(); try { await deleteService(deleteServiceButton.dataset.deleteService); } catch (error) { toast(friendlyError(error), 'error'); } return; }
     const editTeam = event.target.closest('[data-edit-team]'); if (editTeam) { const member = state.team.find((item) => item.id === editTeam.dataset.editTeam); const form = $('#team-form'); form.reset(); form.elements.id.value = member.id; form.elements.name.value = member.name; form.elements.specialty.value = member.specialty; form.elements.category_id.value = member.category_id; form.elements.description.value = member.description; form.elements.is_published.checked = member.is_published; $('#team-dialog-title').textContent = 'Изменить карточку'; openDialog('team-dialog'); }
     const deleteTeamButton = event.target.closest('[data-delete-team]'); if (deleteTeamButton) await deleteTeam(deleteTeamButton.dataset.deleteTeam);
     const editText = event.target.closest('[data-edit-text]'); if (editText) { const text = state.texts.find((item) => item.key === editText.dataset.editText); const form = $('#text-form'); form.reset(); form.elements.key.value = text.key; form.elements.value.value = text.value; form.elements.is_published.checked = text.is_published; $('#text-context').textContent = `${text.section} · ${text.key}`; $('#text-preview').textContent = text.value; openDialog('text-dialog'); }
@@ -351,4 +351,5 @@
   window.__shiPendingAction = null;
   initAuth();
 })();
+
 
