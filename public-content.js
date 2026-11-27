@@ -30,7 +30,7 @@
       var result = client.storage.from('site-media').getPublicUrl(path);
       return result.data && result.data.publicUrl ? result.data.publicUrl : '';
     }
-    return '';
+    return config.url + '/storage/v1/object/public/site-media/' + path.split('/').map(encodeURIComponent).join('/');
   }
 
   function contentMap(rows) {
@@ -203,7 +203,7 @@
     });
   }
 
-  if (client) loadPublicContent();
-  else window.addEventListener('shi:supabase-ready', loadPublicContent, { once: true });
+  loadPublicContent();
+  window.addEventListener('shi:supabase-ready', loadPublicContent, { once: true });
 }());
 
